@@ -1,6 +1,17 @@
 """Market data service for accessing quote data via Moomoo API."""
 
-from moomoo import OpenQuoteContext, RET_OK, SubType, KLType, AuType
+from moomoo import (
+    OpenQuoteContext,
+    RET_OK,
+    SubType,
+    KLType,
+    AuType,
+    OptionDataFilter,
+    IndexOptionType,
+    OptionType,
+    OptionCondType,
+)
+from datetime import datetime
 
 
 class MarketDataService:
@@ -215,5 +226,125 @@ class MarketDataService:
         ret, data = self.quote_ctx.get_user_security(group_name)
         if ret != RET_OK:
             raise RuntimeError(f"get_user_security failed: {data}")
+
+        return data.to_dict("records")
+
+    def get_option_expiration_date(self, code: str, index_option_type: str | None = None) -> list[dict]:
+        """Get option expiration dates for an underlying stock.
+
+        Args:
+            code: Stock code (e.g., 'HK.00700').
+            index_option_type: Optional index option type enum name or value.
+
+        Returns:
+            List of dicts with fields like `strike_time`, `option_expiry_date_distance`, `expiration_cycle`.
+
+        Raises:
+            RuntimeError: If the quote context is not connected or SDK call fails.
+        """
+        if not self.quote_ctx:
+            raise RuntimeError("Quote context not connected")
+
+        index_enum = None
+        if index_option_type is not None:
+            index_enum = getattr(IndexOptionType, index_option_type, index_option_type)
+
+        ret, data = self.quote_ctx.get_option_expiration_date(code=code, index_option_type=index_enum)
+        if ret != RET_OK:
+            raise RuntimeError(f"get_option_expiration_date failed: {data}")
+
+        return data.to_dict("records")
+
+    def get_option_chain(
+        self,
+        code: str,
+        index_option_type: str | None = None,
+        start: str | None = None,
+        end: str | None = None,
+        option_type: str | None = None,
+        option_cond_type: str | None = None,
+        data_filter: dict | None = None,
+        max_count: int | None = None,
+    ) -> list[dict]:
+        """Retrieve option chain data for an underlying security.
+
+        Args:
+            code: Underlying code (e.g., 'HK.00700').
+            index_option_type: Optional index option type enum name or value.
+            start: Start date (YYYY-MM-DD) for expiration filter.
+            end: End date (YYYY-MM-DD) for expiration filter (inclusive).
+            option_type: 'CALL', 'PUT', or None for both.
+            option_cond_type: In/Out of the money filter enum name or value.
+            data_filter: Dict of numeric filters matching OptionDataFilter fields.
+            max_count: Optional maximum number of rows to return (SDK may limit results).
+
+        Returns:
+            List[dict] of option records.
+
+        Raises:
+            RuntimeError: If quote context not connected or SDK returns error.
+        """
+        if not self.quote_ctx:
+            raise RuntimeError("Quote context not connected")
+
+        # Validate date window (API limits to 30 days span)
+        if start is not None or end is not None:
+            # normalize to datetime.date
+            fmt = "%Y-%m-%d"
+            if start is None:
+                # if only end provided, start = end - 30 days
+                end_date = datetime.strptime(end, fmt).date()
+                start_date = end_date
+            elif end is None:
+                start_date = datetime.strptime(start, fmt).date()
+                end_date = start_date
+            else:
+                start_date = datetime.strptime(start, fmt).date()
+                end_date = datetime.strptime(end, fmt).date()
+            # compute span
+            delta = (end_date - start_date).days
+            if delta < 0:
+                raise RuntimeError("get_option_chain failed: end date is before start date")
+            if delta > 30:
+                raise RuntimeError("get_option_chain failed: date span exceeds 30 days")
+
+        index_enum = None
+        if index_option_type is not None:
+            index_enum = getattr(IndexOptionType, index_option_type, index_option_type)
+
+        option_type_enum = None
+        if option_type is not None:
+            option_type_enum = getattr(OptionType, option_type, option_type)
+
+        option_cond_enum = None
+        if option_cond_type is not None:
+            option_cond_enum = getattr(OptionCondType, option_cond_type, option_cond_type)
+
+        filter_obj = None
+        if data_filter:
+            filter_obj = OptionDataFilter()
+            for k, v in data_filter.items():
+                if hasattr(filter_obj, k):
+                    setattr(filter_obj, k, v)
+
+        # Call SDK
+        kwargs = {
+            "code": code,
+            "index_option_type": index_enum,
+            "start": start,
+            "end": end,
+            "option_type": option_type_enum,
+            "option_cond_type": option_cond_enum,
+            "data_filter": filter_obj,
+        }
+        if max_count is not None:
+            kwargs["max_count"] = max_count
+
+        # Remove None values to pass only provided args
+        call_kwargs = {k: v for k, v in kwargs.items() if v is not None}
+
+        ret, data = self.quote_ctx.get_option_chain(**call_kwargs)
+        if ret != RET_OK:
+            raise RuntimeError(f"get_option_chain failed: {data}")
 
         return data.to_dict("records")

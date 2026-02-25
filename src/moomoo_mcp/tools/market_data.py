@@ -210,3 +210,55 @@ async def get_user_security(
     securities = market_data_service.get_user_security(group_name)
     await ctx.info(f"Retrieved {len(securities)} securities from group '{group_name}'")
     return securities
+
+
+@mcp.tool()
+async def get_option_expiration_date(
+    ctx: Context[ServerSession, AppContext],
+    code: str,
+    index_option_type: str | None = None,
+) -> list[dict]:
+    """Get option expiration dates for an underlying stock.
+
+    Args:
+        code: Stock code (e.g., 'HK.00700').
+        index_option_type: Optional index option type enum name or value.
+
+    Returns:
+        List of dicts containing `strike_time`, `option_expiry_date_distance`, and `expiration_cycle`.
+    """
+    market_data_service = ctx.request_context.lifespan_context.market_data_service
+    result = market_data_service.get_option_expiration_date(code=code, index_option_type=index_option_type)
+    await ctx.info(f"Retrieved {len(result)} option expiration dates for {code}")
+    return result
+
+
+@mcp.tool()
+async def get_option_chain(
+    ctx: Context[ServerSession, AppContext],
+    code: str,
+    index_option_type: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
+    option_type: str | None = None,
+    option_cond_type: str | None = None,
+    data_filter: dict | None = None,
+    max_count: int | None = None,
+) -> list[dict]:
+    """Retrieve option chain for an underlying stock.
+
+    This tool wraps `MarketDataService.get_option_chain` and returns a list of option records.
+    """
+    market_data_service = ctx.request_context.lifespan_context.market_data_service
+    result = market_data_service.get_option_chain(
+        code=code,
+        index_option_type=index_option_type,
+        start=start,
+        end=end,
+        option_type=option_type,
+        option_cond_type=option_cond_type,
+        data_filter=data_filter,
+        max_count=max_count,
+    )
+    await ctx.info(f"Retrieved {len(result)} option chain entries for {code}")
+    return result
