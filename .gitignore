@@ -98,3 +98,4 @@ debug.log
 uv.lock
 # Skills
 .agent/skills/
+uv.lock
