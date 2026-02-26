@@ -1,5 +1,6 @@
 import logging
 import os
+from pathlib import Path
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -12,6 +13,44 @@ from moomoo_mcp.services.market_data_service import MarketDataService
 from moomoo_mcp.services.trade_service import TradeService
 
 logger = logging.getLogger(__name__)
+
+
+# Load environment variables from a local .env file if present.
+def _load_dotenv_file(dotenv_path: str | None = None) -> None:
+    """Load simple KEY=VALUE pairs from a .env file into os.environ.
+
+    This avoids adding an external dependency. Lines starting with '#' are ignored.
+    Existing environment variables are not overwritten.
+    """
+    try:
+        if dotenv_path is None:
+            # project root (two levels up from this file)
+            root = Path(__file__).resolve().parents[2]
+            dotenv_path = str(root / ".env")
+
+        p = Path(dotenv_path)
+        if not p.exists():
+            return
+
+        with p.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" not in line:
+                    continue
+                key, val = line.split("=", 1)
+                key = key.strip()
+                val = val.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = val
+    except Exception:
+        # Do not fail startup if dotenv parsing fails; fallback to env only.
+        logger.debug("Failed to load .env file; continuing with existing environment")
+
+
+# Attempt to load .env early so subsequent code can read env vars
+_load_dotenv_file()
 
 
 # Disable moomoo library console logging to prevent corruption of MCP stdout protocol
