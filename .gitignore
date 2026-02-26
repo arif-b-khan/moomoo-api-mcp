@@ -94,5 +94,7 @@ Thumbs.db
 # MCP
 debug.log
 
+# uv lockfile (tooling/runtime pin)
+uv.lock
 # Skills
 .agent/skills/
